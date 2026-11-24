@@ -91,6 +91,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--brand-2);outline
 .report .disc{font-size:11.5px;color:var(--muted);margin-top:30px;white-space:pre-wrap;border-top:1px solid var(--line);padding-top:12px}
 .report .ri .h .pill{align-self:flex-start}
 @media(max-width:600px){.report{padding:20px 16px}.report .r-head{flex-direction:column}.report .r-head>div:last-child{text-align:left!important}}
+.checks{border:1px solid #f0c36d;background:#fff8e6;border-radius:10px;padding:12px 14px;margin-bottom:22px;font-size:14px}
+.checks.good{border-color:#a9d8b8;background:var(--ok-bg)}
+.checks ul{margin:8px 0;padding-left:20px}.checks li{margin:4px 0}
+@media print{.no-print{display:none!important}}
 .report-bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;justify-content:center;padding:10px;background:var(--brand)}
 @media print{
   @page{size:letter;margin:14mm}
@@ -142,7 +146,7 @@ const store={
 
 /* ================= Template ================= */
 const TEMPLATE=[
- ['Grounds & Exterior',['Grading & drainage','Driveway & walkways','Siding / exterior walls','Exterior trim & caulking','Windows (exterior)','Exterior doors','Decks, porches & steps','Railings','Fences & retaining walls','Vegetation near structure']],
+ ['Grounds & Exterior',['Grading & drainage','Driveway & walkways','Siding / exterior walls','Exterior trim & caulking','Windows (exterior)','Exterior doors','Decks, patios, porches & steps','Railings','Fences & retaining walls','Vegetation near structure']],
  ['Roof',['Roof covering','Flashing','Gutters & downspouts','Chimney','Skylights & penetrations','Roof ventilation']],
  ['Structure & Foundation',['Foundation walls','Floor structure','Visible framing','Evidence of water intrusion','Cracks / settlement']],
  ['Electrical',['Service entrance & meter','Main panel','Breakers / fuses','Grounding & bonding','Visible wiring','Outlets & switches (sample)','GFCI / AFCI protection','Smoke & CO alarms']],
@@ -161,8 +165,9 @@ const QUICK={
 };
 const STATUS={ok:'Satisfactory',warn:'Marginal',bad:'Defect',na:'N/A'};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-const DEFAULT_SETTINGS={company:'',inspector:'',license:'',phone:'',email:'',logo:'',
-  disclaimer:'This report is a visual, non-invasive inspection of readily accessible areas on the date of inspection. It is not a guarantee or warranty of the condition of the property, and it does not cover concealed or latent defects. Items noted as defects or marginal should be evaluated and corrected by qualified, licensed professionals before closing.'};
+const DEFAULT_SETTINGS={company:'',address:'',bizLicense:'',inspector:'',license:'',phone:'',email:'',logo:'',
+  disclaimer:'This report describes the visible condition of readily accessible features and components of the dwelling on the date of inspection. The inspection was non-invasive. Areas that were concealed or not accessible, and any components excluded by the home inspection contract, were not inspected. Items noted as defects or marginal should be evaluated or repaired by a qualified professional.'};
+const REQUIRED={'Roof':'roofing, flashings and chimney','Grounds & Exterior':'the exterior (lot grading, walkways, driveways, retaining walls, patios and decks)','Structure & Foundation':'structure','Electrical':'electrical','Heating & Cooling':'heating, heat pumps and cooling','Attic & Insulation':'insulation','Plumbing':'plumbing','Interior':'interior'};
 
 function newInspection(){
   return {id:uid(),created:Date.now(),updated:Date.now(),
@@ -253,7 +258,7 @@ function viewInspection(){
     <h2>Sections</h2>
     ${i.sections.map(s=>{const sc=secCounts(s);const done=s.items.length-sc.todo;
       return `<a class="list-item" href="#/i/${i.id}/s/${s.id}"><div class="grow"><div style="font-weight:600">${esc(s.name)}</div>
-      <div class="small muted">${done}/${s.items.length} checked ${sc.bad?`· <span class="pill bad">${sc.bad} defect${sc.bad>1?'s':''}</span>`:''} ${sc.warn?`<span class="pill warn">${sc.warn} marginal</span>`:''}</div></div><span class="chev">›</span></a>`}).join('')}
+      <div class="small muted">${done}/${s.items.length} checked ${s.excluded?'· <span class="pill na">Excluded by contract</span>':''} ${sc.bad?`· <span class="pill bad">${sc.bad} defect${sc.bad>1?'s':''}</span>`:''} ${sc.warn?`<span class="pill warn">${sc.warn} marginal</span>`:''}</div></div><span class="chev">›</span></a>`}).join('')}
     <div class="addrow"><input type="text" id="newsec" placeholder="Add a section (e.g. Pool, Outbuilding)"><button class="btn ghost" onclick="addSection()">Add</button></div>
     <h2>Summary for client</h2>
     <div class="card"><textarea id="summary" placeholder="Overall impressions, top priorities, anything the buyer should know first.">${esc(i.summary)}</textarea></div>
@@ -294,10 +299,12 @@ async function viewSection(sid){
   `<div class="wrap">
     <div class="row small muted" style="margin:0 4px 10px"><div class="grow">Tap a rating for each item. Add notes and photos for anything not satisfactory.</div>
       <button class="btn ghost" style="padding:7px 10px;font-size:13px" onclick="markRestOk('${s.id}')">Mark rest OK</button></div>
+    <label class="card row" style="cursor:pointer;color:inherit;font-size:inherit;margin:0 0 12px"><input type="checkbox" id="excl" ${s.excluded?'checked':''} style="width:20px;height:20px;flex:none"><span class="grow"><b>Excluded by the inspection contract</b><br><span class="small muted">Tick only if the client agreed in the signed contract that this section won't be inspected. It will be listed as "Not inspected" in the report.</span></span></label>
     <div id="items"></div>
     <div class="addrow"><input type="text" id="newitem" placeholder="Add an item to this section"><button class="btn ghost" onclick="addItem('${s.id}')">Add</button></div>
     <div style="margin-top:18px">${next?`<a class="btn block" href="#/i/${current.id}/s/${next.id}">Next: ${esc(next.name)} ›</a>`:`<a class="btn block" href="#/i/${current.id}/report">All sections done: preview report ›</a>`}</div>
   </div>`;
+  $('#excl').onchange=e=>{s.excluded=e.target.checked;saveSoon();toast(s.excluded?'Marked as excluded by contract':'Section included')};
   const box=$('#items');
   for(const it of s.items){box.appendChild(await itemEl(s,it))}
 }
@@ -335,16 +342,30 @@ async function viewReport(){
   const ph=async ids=>ids.length?`<div class="rphotos">${(await Promise.all(ids.map(photoURL))).map(u=>`<img src="${u}" alt="">`).join('')}</div>`:'';
   let body='';
   for(const s of i.sections){
+    if(s.excluded) continue;
     const rated=s.items.filter(it=>it.status||it.note||it.photos.length); if(!rated.length)continue;
     body+=`<h3>${esc(s.name)}</h3>`;
     for(const it of rated){body+=`<div class="ri"><div class="h"><span>${esc(it.name)}</span>${it.status?`<span class="pill ${it.status}">${STATUS[it.status]}</span>`:''}</div>${it.note.trim()?`<p>${esc(it.note.trim())}</p>`:''}${await ph(it.photos)}</div>`}
   }
+  const excluded=i.sections.filter(s=>s.excluded);
+  if(excluded.length) body+=`<h3>Not inspected</h3><p>The following were excluded from this inspection by the home inspection contract: ${excluded.map(s=>esc(s.name)).join(', ')}.</p>`;
+  const issues=[];
+  for(const k of Object.keys(REQUIRED)){const s=i.sections.find(x=>x.name===k);
+    if(!s) issues.push(`There is no "${esc(k)}" section. Alberta reports must address ${REQUIRED[k]} unless the contract excludes it.`);
+    else if(!s.excluded&&!s.items.some(it=>it.status)) issues.push(`<b>${esc(k)}</b> has no ratings. Rate it, or mark it "Excluded by the inspection contract" if the client agreed to that.`);}
+  i.sections.forEach(s=>{if(s.excluded)return;s.items.forEach(it=>{
+    if((it.status==='bad'||it.status==='warn')&&!it.note.trim()) issues.push(`<b>${esc(s.name)}: ${esc(it.name)}</b> is marked ${STATUS[it.status]} but has no recommendation. Alberta requires a recommendation for every deficiency ("get an expert opinion" counts).`);
+    if(/\$\s?\d|\d\s?(dollars|bucks)\b|cost (to|of) (repair|replace|fix)/i.test(it.note)) issues.push(`<b>${esc(s.name)}: ${esc(it.name)}</b>: the note looks like a repair cost estimate. Alberta inspectors may not give cost estimates.`);});});
+  if(/liabilit|not (be )?(held )?liable|within \d+ ?(day|month|year)|no claim/i.test(st.disclaimer)) issues.push('Your disclaimer seems to limit liability or the time to make a claim. Alberta prohibits that wording in reports. Edit it in Settings.');
+  if(!st.bizLicense||!st.license) issues.push('Add your business licence # and inspector licence # in Settings so they appear on the report.');
+  const checks=`<div class="checks no-print ${issues.length?'':'good'}"><b>${issues.length?`Alberta report check: ${issues.length} thing${issues.length>1?'s':''} to fix`:'Alberta report check: no problems found'}</b>${issues.length?`<ul>${issues.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}<div class="small">Checked against the Home Inspection Business Regulation (AR 75/2011), s.22, s.23 and s.26(6). This only screens for common problems. You're responsible for your own compliance. This box doesn't print.</div></div>`;
   $('#app').innerHTML=`<div class="report-bar"><button class="btn ghost" onclick="location.hash='#/i/${i.id}'">‹ Back</button><button class="btn" style="background:#fff;color:var(--brand)" onclick="window.print()">Save as PDF / Print</button></div>
   <div class="report">
+    ${checks}
     <div class="r-head"><div><h1>Home Inspection Report</h1>
       <div style="font-size:18px;font-weight:600">${esc(p.address||'')}</div><div class="muted">${esc(p.city||'')}</div></div>
       <div style="text-align:right">${st.logo?`<img class="r-logo" src="${st.logo}" alt=""><br>`:''}<b>${esc(st.company)}</b>
-      <div class="small muted">${esc([st.inspector,st.license&&('Licence '+st.license),st.phone,st.email].filter(Boolean).join('\n')).replace(/\n/g,'<br>')}</div></div></div>
+      <div class="small muted">${esc([st.address,st.bizLicense&&('Business licence '+st.bizLicense),st.inspector&&(st.inspector+(st.license?', inspector licence '+st.license:'')),st.phone,st.email].filter(Boolean).join('\n')).replace(/\n/g,'<br>')}</div></div></div>
     <h3>Inspection details</h3>
     <table>${[['Client',p.client],['Inspection date',fmtDate(p.date)],['Property type',p.type],['Year built',p.year],['Approx. size',p.sqft&&p.sqft+' sq ft'],['Weather',p.weather],['Occupancy',p.occupied],['Present',p.present]].filter(r=>r[1]).map(r=>`<tr><td class="k">${r[0]}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>
     <h3>Summary</h3>
@@ -362,8 +383,9 @@ async function viewSettings(){
   const f=(k,l,t='text')=>`<label for="s_${k}">${l}</label><input id="s_${k}" type="${t}" value="${esc(st[k])}" data-s="${k}">`;
   $('#app').innerHTML=bar('Company & report settings','#/')+
   `<div class="wrap"><div class="card">
-    ${f('company','Company name')}
-    <div class="grid2">${f('inspector','Inspector name')}${f('license','Licence / certification #')}</div>
+    <div class="grid2">${f('company','Business name')}${f('bizLicense','Business licence #')}</div>
+    ${f('address','Business address')}
+    <div class="grid2">${f('inspector','Inspector name')}${f('license','Inspector licence #')}</div>
     <div class="grid2">${f('phone','Phone','tel')}${f('email','Email','email')}</div>
     <label>Logo (shown on reports)</label>
     <div class="row">${st.logo?`<img src="${st.logo}" style="max-height:48px;max-width:140px">`:'<span class="muted small">No logo</span>'}
@@ -371,6 +393,7 @@ async function viewSettings(){
       ${st.logo?`<button class="btn danger" id="rmlogo">Remove</button>`:''}</div>
     <label for="s_disclaimer">Report disclaimer</label><textarea id="s_disclaimer" data-s="disclaimer" style="min-height:130px">${esc(st.disclaimer)}</textarea>
   </div>
+  <div class="card small" style="background:#eef4fb;border-color:#cfe0f3"><b>Alberta inspectors:</b> under the Home Inspection Business Regulation, reports must not limit your liability or the time to make a claim (s.22), and must not include repair cost estimates (s.26(6)). Keep your disclaimer to describing the scope of the inspection.</div>
   <div class="card small muted">Everything is stored on this device only. Nothing is uploaded anywhere. Clearing your browser data will erase inspections, so save finished reports as PDFs.</div>
   </div>`;
   document.querySelectorAll('[data-s]').forEach(el=>el.addEventListener('input',async e=>{const s=await settings();s[e.target.dataset.s]=e.target.value;await store.setKv('settings',s)}));
